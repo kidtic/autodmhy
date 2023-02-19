@@ -1,6 +1,6 @@
 '''
  名称: autodmhy 
- 版本: v1.0
+ 版本: v1.1
  作者: kidtic
  说明: 实现樱花动漫自动追番功能
 
@@ -18,6 +18,9 @@
         xxx02.mp4
         dmhyKeyWord.txt
     autodmhy.py
+
+ 版本改动: 
+    v1.1 - 将所有正在追番的目录打印出来，并且停在最后。
 '''
 
 from requests_html import HTMLSession
@@ -138,5 +141,12 @@ if __name__ == '__main__':
         for dirname in dirnames:  #遍历所有文件夹下的内容
             workpath = os.path.join(dirpath, dirname)
             if dev.open(workpath):  # 查看文件夹下是否有keyword文件
+                list_allfile.append(workpath)
                 dev.search()
                 dev.download()
+    #print res
+    print("====================目前追番列表===================")
+    for e in list_allfile:
+        print(e)
+    
+    input("Press any key to continue")
