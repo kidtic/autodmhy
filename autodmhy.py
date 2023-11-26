@@ -21,6 +21,7 @@
 
  版本改动: 
     v1.1 - 将所有正在追番的目录打印出来，并且停在最后。
+    v1.2 - 取消代理
 '''
 
 from requests_html import HTMLSession
@@ -41,10 +42,11 @@ class Search_dmhy:
     ignlist = []        #忽略
 
     def __init__(self):
-        self.proxie = {"http":"http://127.0.0.1:7890"}  # todo:这里填好代理端口
+        #self.proxie = {"http":"http://127.0.0.1:7890"}  # todo:这里填好代理端口
+        self.proxie = None
         url = 'http://www.dmhy.org'  # 这里定义访问的网络地址
         self.url = url
-        self.downurl = "http://kk:133z195@192.168.123.205:24564" # todo:这里填好比特彗星的远程下载接口
+        self.downurl = "http://kk:133z195@localhost:24564" # todo:这里填好比特彗星的远程下载接口
         self.session = HTMLSession()
 
 
