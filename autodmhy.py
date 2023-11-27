@@ -1,32 +1,35 @@
 '''
  名称: autodmhy 
- 版本: v1.1
+ 版本: v1.3
  作者: kidtic
- 说明: 实现樱花动漫自动追番功能
+ 说明: 实现动漫花园www.dmhy.org自动追番功能
 
  环境: 提前设置好代理与比特彗星的远程下载功能
- 使用: autodmhy.py会自动遍历当前目录下的所有文件夹，只有文件夹中有dmhyKeyWord.txt的才会被当作工作目录。
-       dmhyKeyWord.txt中第一行为樱花动漫的搜索关键字，剩下的为忽略项。
-       autodmhy.py会搜索关键字并将搜索的动漫内容下载到当前工作目录（不会下载已经存在的 和 忽略项中的）
+ 使用: autodmhy.py会自动遍历当前目录下的所有文件夹，只有文件夹中有dmhy.json的才会被当作工作目录。
+        终端运行 【autodmhy.py add "关键词"】 会添加指定的目录
+        终端运行 【autodmhy.py ref】会重新刷新所有的dmhy.json的items，同步网站内容。
+        终端运行 【autodmhy.py】 动态更新items，并且进行自动补充下载
  目录结构：
     xxx动漫1/
         xxx01.mp4
         xxx02.mp4
-        dmhyKeyWord.txt
+        dmhy.json
     xxx动漫2/
         xxx01.mp4
         xxx02.mp4
-        dmhyKeyWord.txt
+        dmhy.json
     autodmhy.py
 
  版本改动: 
     v1.1 - 将所有正在追番的目录打印出来，并且停在最后。
     v1.2 - 取消代理
+    v1.3 - 修改框架 dmhy.json
 '''
 
 from requests_html import HTMLSession
 import os
 from time import sleep
+import json
 
 
 class Search_dmhy:
@@ -40,6 +43,7 @@ class Search_dmhy:
     list_filesize = []  #文件大小
     keyword = ""        #搜索关键字
     ignlist = []        #忽略
+    dmhyjson = None
 
     def __init__(self):
         #self.proxie = {"http":"http://127.0.0.1:7890"}  # todo:这里填好代理端口
@@ -49,35 +53,60 @@ class Search_dmhy:
         self.downurl = "http://kk:133z195@localhost:24564" # todo:这里填好比特彗星的远程下载接口
         self.session = HTMLSession()
 
+    def findweb(self,url):
+        '''
+        解析动漫花园资源帖子网站内容
+        '''
+        try:
+            #打开网页
+            selobj = self.session.get(url,proxies=self.proxie)
+            ####
+            magnetStr = selobj.html.find("#a_magnet",first=True).attrs['href']
+            templi = selobj.html.find(".file_list",first=True).find("li",first=True)
+            tempsize = templi.find("span",first=True)
+            namestr = templi.text.replace(tempsize.text,"")
+            namestr = namestr.rstrip()
+            print(namestr)
+            print(tempsize.text)
+            item = {"magnet":magnetStr, "file":namestr, "filesize":tempsize.text}
+            return item
+        except:
+            return None
 
-    #打开对应的工作空间（包含dmhyKeyWord.txt的文件夹）
     def open(self, dir):
+        '''
+        打开对应的工作空间（包含dmhy.json的文件夹）
+        '''
         self.curdir = dir
-        #查看当前文件夹下是否有dmhyKeyWord.txt
+        #查看当前文件夹下是否有dmhy.json
         tempfname =  os.listdir(dir)
         #print(tempfname)
-        if "dmhyKeyWord.txt" not in tempfname: 
+        if "dmhy.json" not in tempfname: 
             return False
-        f = open(dir + "/dmhyKeyWord.txt",'r',encoding='utf-8')
-        templst = f.readlines()
-        self.keyword = templst[0].replace('\n', '')
-        print(self.keyword)
-        self.ignlist = templst[1:]
-        for i in range(0,len(self.ignlist)):
-            self.ignlist[i] = self.ignlist[i].replace('\n', '')
-        print(self.ignlist)
-        f.close()
-       
+        with open(dir + "/dmhy.json",'r',encoding='utf-8') as f:
+            self.dmhyjson =json.load(f)
+            self.keyword = self.dmhyjson["keyword"]
+            print(self.keyword)
+            self.ignlist = self.dmhyjson["ignlist"]
+            print(self.ignlist)
+            if self.keyword is None:
+                return False
+
         return True
 
 
-    #搜索dmhy网站上相关关键字的结果
-    def search(self):
-        self.list_name = []
-        self.list_pagelink = []
+    def search(self,fetch=False):
+        '''
+        搜索dmhy网站上相关关键字的结果 
+
+        ``fetch`` 代表强制刷新items，会遍历所有网址
+        '''
+        self.list_name = []         #网页标题
+        self.list_pagelink = []     #网页地址
         self.list_magnet = []
         self.list_filename = []
         self.list_filesize = []
+        if self.keyword is None:return
         # 打开网页
         mainobj = self.session.get(self.url + "/?keyword=" + self.keyword,proxies=self.proxie)
         # 找到所有的搜索结果
@@ -88,52 +117,63 @@ class Search_dmhy:
             linkurl = self.url + link.attrs['href']
             self.list_name.append(link.text)
             self.list_pagelink.append(linkurl)
-
             print(link.text+"   "+ linkurl)
-        #查找磁力链接
-        for i in range(len(self.list_pagelink)):
-            #打开网页
-            selobj = self.session.get(self.list_pagelink[i],proxies=self.proxie)
 
-            ####
-            magnetStr = selobj.html.find("#a_magnet",first=True).attrs['href']
-            templi = selobj.html.find(".file_list",first=True).find("li",first=True)
-            tempsize = templi.find("span",first=True)
-            namestr = templi.text.replace(tempsize.text,"")
-            namestr = namestr.rstrip()
-            print(namestr)
-            print(tempsize.text)
+        if fetch:
+            items = []
+            #查找磁力链接
+            for i in range(len(self.list_pagelink)):
+                item = self.findweb(self.list_pagelink[i])
+                if item is None:
+                    print("网站解析异常，跳过")
+                    continue
+                item["webtitle"] = self.list_name[i]
+                items.append(item)
+            #重写item
+            self.dmhyjson["items"] = items
+        else:
+            #先判断dmhy.json的items里有没有项目
+            items = self.dmhyjson["items"]
+            #将dmhyjson中items选项的webtitle汇集一下
+            items_titles = []
+            for e in items:
+                items_titles.append(e["webtitle"])
+            #查看list_name中多出来了多少项目
+            for i in range(len(self.list_name)):
+                title = self.list_name[i]
+                if title in items_titles:continue
+                #打开网页查找磁力
+                item = self.findweb(self.list_pagelink[i])
+                #加入items
+                item["webtitle"] = title
+                items.append(item)
+            #重写item
+            self.dmhyjson["items"] = items
+        #将self.dmhyjson存入
+        with open(self.curdir + "/dmhy.json",'w',encoding='utf-8') as f:
+            json.dump(self.dmhyjson, f, indent=4, ensure_ascii=False)
 
 
-            self.list_filename.append(namestr)
-            self.list_filesize.append(tempsize.text)
-            self.list_magnet.append(magnetStr)
-
-        #保存
-        f = open(self.curdir+"/index.html", 'w')
-        fh_1 = "<html>\n<head></head>\n<body>\n"
-        fh_2 = "</body>\n</html>"
-        fh_li = ""
-        for i in range(len(self.list_magnet)):
-            fh_li = fh_li + "<a href=\"%s\">%s</a><span style=\"text-indent:2em\">%s</span><br>\n"%(self.list_magnet[i], self.list_name[i], self.list_filename[i])
-        f.write(fh_1)
-        f.write(fh_li)
-        f.write(fh_2)
-        f.close()
-
-    #将不存在工作空间内且不在ignlist内的文件下载到当前目录
     def download(self):
+        '''
+        将不存在工作空间内且不在ignlist内的文件下载到当前目录
+        '''
+        #检查dmhyjson的items有没有存在在这个目录的
         tempfname =  os.listdir(self.curdir)
-        for i in range(len(self.list_filename)):
-            if self.list_filename[i] not in tempfname+self.ignlist:
-                data={"url":"","save_path":""}
-                data["url"] = self.list_magnet[i]
-                data["save_path"] = os.path.abspath(".")+"\\"+self.curdir
-                print(data["save_path"])
-                print(self.list_filename[i])
-                self.session.post(self.downurl+"/panel/task_add_magnet_result",data)
+        items_files = []
+        items_magnet = []
+        for e in self.dmhyjson["items"]:
+            items_files.append(e["file"])
+            items_magnet.append(e["magnet"])
 
-
+        for i in range(len(items_files)):
+            if items_files[i] in tempfname+self.ignlist:continue
+            data={"url":"","save_path":""}
+            data["url"] = items_magnet[i]
+            data["save_path"] = os.path.abspath(".")+"\\"+self.curdir
+            print(data["save_path"])
+            print(items_files[i])
+            self.session.post(self.downurl+"/panel/task_add_magnet_result",data)
     
 if __name__ == '__main__':
     dev = Search_dmhy()
