@@ -10,6 +10,7 @@
 
 import os
 import re
+import sys
 
 def find_common_substrings(strings):
     min_str = min(strings, key=len)
@@ -23,10 +24,6 @@ def find_common_substrings(strings):
         length -= 1
     substrings = [s for s in substrings if not any(s != t and s in t for t in substrings)]
     return substrings
-
-def find_first_two_digit_num(string):
-    two_digit_numbers = re.search(r'\d{2}', string)
-    return two_digit_numbers.group() if two_digit_numbers else None
 
 def first_num(s):
     # 使用正则表达式寻找1位或2位的数字
@@ -65,9 +62,11 @@ def autoReName_mp4(titlename,videofile):
 def get_videoTitle_frompwd(current_dir):
     # 获取当前目录的父文件夹
     parent_dir = os.path.basename(current_dir)
+    print("parent_dir",parent_dir)
     matchs  = re.findall('\[(.*?)\]', parent_dir)
     titlename = "name"
     si = ""
+    print("titlename match: ")
     print(matchs)
     if len(matchs)==1:
         titlename = matchs[0]
@@ -83,6 +82,8 @@ def autoReName_mp4_indir(dir):
     tempfname =  os.listdir(dir)
     videofile = []
     for e in tempfname:
+        if e=="dmhy.json":
+            return None
         if e.endswith(".mp4") or e.endswith(".mkv"):
             videofile.append(e)
     print(videofile)
@@ -113,22 +114,42 @@ def autoReName_mp4_indir(dir):
         print(strings_list[i][1]+"  <=  "+strings_list[i][0])
     return strings_list
 
+def allrename():
+    for dirpath, dirnames, filenames in os.walk('.'):
+            if dirpath != ".":
+                break
+            for dirname in dirnames:  #遍历所有文件夹下的内容
+                workpath = os.path.join(dirpath, dirname)
+                print("==============="+workpath)
+                renamelist =  autoReName_mp4_indir(workpath)
+                if renamelist is None:continue
+                keystr = input("按回车确定 e取消")
+                if keystr=='':
+                    print("开始重命名")
+                    for i in range(len(renamelist)):
+                        os.rename(workpath+"/"+renamelist[i][0],workpath+"/"+renamelist[i][1])
+                elif keystr=='e':
+                    print("取消重命名")
+
 
 
 if __name__ == '__main__':
-    for dirpath, dirnames, filenames in os.walk('.'):
-        if dirpath != ".":
-            break
-        for dirname in dirnames:  #遍历所有文件夹下的内容
-            workpath = os.path.join(dirpath, dirname)
-            print("==============="+workpath)
-            renamelist =  autoReName_mp4_indir(workpath)
-            if renamelist is None:continue
-            keystr = input("按回车确定 e取消")
-            if keystr=='':
-                print("开始重命名")
-                for i in range(len(renamelist)):
-                    os.rename(workpath+"/"+renamelist[i][0],workpath+"/"+renamelist[i][1])
-            elif keystr=='e':
-                print("取消重命名")
+    args = sys.argv
+    if len(args)>=2:
+        indir = "./"+args[1]
+        print(indir)
+        renamelist =  autoReName_mp4_indir(indir)
+        if renamelist is None:
+            input("不是标准文件夹")
+            exit()
+        keystr = input("按回车确定 e取消")
+        if keystr=='':
+            print("开始重命名")
+            for i in range(len(renamelist)):
+                os.rename(indir+"/"+renamelist[i][0],indir+"/"+renamelist[i][1])
+        elif keystr=='e':
+            print("取消重命名")
+
+    else:
+        allrename()
             

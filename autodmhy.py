@@ -1,6 +1,6 @@
 '''
  名称: autodmhy 
- 版本: v1.3
+ 版本: v1.4
  作者: kidtic
  说明: 实现动漫花园www.dmhy.org自动追番功能
 
@@ -24,12 +24,71 @@
     v1.1 - 将所有正在追番的目录打印出来，并且停在最后。
     v1.2 - 取消代理
     v1.3 - 修改框架 dmhy.json
+    v1.4 - 加入重命名功能，不过需要把比特彗星的任务停掉重新运行才行。
 '''
 
 from requests_html import HTMLSession
 import os
 from time import sleep
 import json
+import re
+import sys
+
+def find_common_substrings(strings):
+    min_str = min(strings, key=len)
+    substrings = []
+    length = len(min_str)
+    while length > 0:
+        for i in range(len(min_str) - length + 1):
+            substr = min_str[i:i+length]
+            if all(substr in s for s in strings):
+                substrings.append(substr)
+        length -= 1
+    substrings = [s for s in substrings if not any(s != t and s in t for t in substrings)]
+    return substrings
+
+def first_num(s):
+    # 使用正则表达式寻找1位或2位的数字
+    match = re.search(r'\d{1,2}', s)
+    # 如果找到匹配项，返回该数字，否则返回None
+    return int(match.group()) if match else None
+
+def autoReName_mp4(titlename,videofile):
+    '''
+    智能重命名 return [src][dst]
+    '''
+    result = find_common_substrings(videofile)
+    strings_list = []
+    for estr in videofile:
+        vidname = estr
+        houzhui = ".mp4"
+        if vidname.endswith(".mkv"):
+            houzhui = ".mkv"
+        elif vidname.endswith(".mp4"):
+            houzhui = ".mp4"
+        
+        for spe in result:
+            estr = estr.replace(spe,"")
+        #找到头个位数字
+        print(estr)
+        tnum = first_num(estr)
+        if tnum is None:
+            strings_list.append([vidname,""])
+        else:
+            strnum = "{:02d}".format(tnum)
+            print(strnum)
+            instr = titlename+" E"+strnum+houzhui
+            strings_list.append([vidname,instr])
+    #重复名字将不会重新命名
+    strset = []
+    for i in range(len(strings_list)):
+        if strings_list[i][1] in strset:
+            strings_list[i][1] = strings_list[i][0]
+        elif strings_list[i][1]=="":
+            strings_list[i][1] = strings_list[i][0]
+        else:
+            strset.append(strings_list[i][1])
+    return strings_list
 
 
 class Search_dmhy:
@@ -44,6 +103,8 @@ class Search_dmhy:
     keyword = ""        #搜索关键字
     ignlist = []        #忽略
     dmhyjson = None
+    dmname = None
+    season = ""
 
     def __init__(self):
         #self.proxie = {"http":"http://127.0.0.1:7890"}  # todo:这里填好代理端口
@@ -89,11 +150,52 @@ class Search_dmhy:
             print(self.keyword)
             self.ignlist = self.dmhyjson["ignlist"]
             print(self.ignlist)
+            self.dmname = self.dmhyjson["name"]
+            self.season = self.dmhyjson["season"]
             if self.keyword is None:
+                return False
+            if self.dmname is None:
                 return False
 
         return True
+    
 
+    def rename(self):
+        '''
+        将依据dmhy.json中的内容、以及当前目录下显示存在的文件为依据 重新命名
+        '''
+        jsonitems = self.dmhyjson["items"]
+        if len(jsonitems)<2:return
+        #按照items里面原本的视频名称列表来自动生成一组
+        srcfname_list=[]
+        for e in jsonitems:
+            srcfname_list.append(e["file"])
+        titlename = self.dmname +" "+self.season
+        rename_list = autoReName_mp4(titlename,srcfname_list)
+        #列出当前文件夹下所有文件
+        dirFileList =  os.listdir(self.curdir)
+
+        for i in range(len(srcfname_list)):
+            srcfile = rename_list[i][0]
+            dstfile = rename_list[i][1]
+            currRname = ""
+            try:
+                currRname = jsonitems[i]["rename"]  #获取当前的原始文件的重命名文件，用于查找
+            except:
+                currRname = ""
+            existFile = ""      #当前文件中存在的与之匹配的文件
+            if currRname in dirFileList:
+                existFile = currRname
+            elif srcfile in dirFileList:
+                existFile = srcfile
+            
+            if existFile=="":continue
+            #重新命名
+            print("rename:  "+dstfile+"  <=  "+existFile)
+            os.rename(self.curdir+"/"+existFile,self.curdir+"/"+dstfile)
+            #重写item
+            jsonitems[i].update({"rename":dstfile})
+        self.dmhyjson["items"] = jsonitems
 
     def search(self,fetch=False):
         '''
@@ -149,6 +251,8 @@ class Search_dmhy:
                 items.append(item)
             #重写item
             self.dmhyjson["items"] = items
+            #智能重新命名
+            self.rename()
         #将self.dmhyjson存入
         with open(self.curdir + "/dmhy.json",'w',encoding='utf-8') as f:
             json.dump(self.dmhyjson, f, indent=4, ensure_ascii=False)
@@ -161,13 +265,16 @@ class Search_dmhy:
         #检查dmhyjson的items有没有存在在这个目录的
         tempfname =  os.listdir(self.curdir)
         items_files = []
+        items_renamef = []
         items_magnet = []
         for e in self.dmhyjson["items"]:
             items_files.append(e["file"])
             items_magnet.append(e["magnet"])
+            items_renamef.append(e["rename"])
 
         for i in range(len(items_files)):
             if items_files[i] in tempfname+self.ignlist:continue
+            if items_renamef[i] in tempfname+self.ignlist:continue
             data={"url":"","save_path":""}
             data["url"] = items_magnet[i]
             data["save_path"] = os.path.abspath(".")+"\\"+self.curdir
