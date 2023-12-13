@@ -1,6 +1,6 @@
 '''
  名称: autodmhy 
- 版本: v1.4
+ 版本: v1.5
  作者: kidtic
  说明: 实现动漫花园www.dmhy.org自动追番功能
 
@@ -25,6 +25,7 @@
     v1.2 - 取消代理
     v1.3 - 修改框架 dmhy.json
     v1.4 - 加入重命名功能，不过需要把比特彗星的任务停掉重新运行才行。
+    v1.5 - 修复v1.4的两个bug
 '''
 
 from requests_html import HTMLSession
@@ -192,9 +193,12 @@ class Search_dmhy:
             if existFile=="":continue
             #重新命名
             print("rename:  "+dstfile+"  <=  "+existFile)
-            os.rename(self.curdir+"/"+existFile,self.curdir+"/"+dstfile)
-            #重写item
-            jsonitems[i].update({"rename":dstfile})
+            try:
+                os.rename(self.curdir+"/"+existFile,self.curdir+"/"+dstfile)
+                #重写item
+                jsonitems[i].update({"rename":dstfile})
+            except:
+                continue
         self.dmhyjson["items"] = jsonitems
 
     def search(self,fetch=False):
@@ -270,7 +274,13 @@ class Search_dmhy:
         for e in self.dmhyjson["items"]:
             items_files.append(e["file"])
             items_magnet.append(e["magnet"])
-            items_renamef.append(e["rename"])
+            temprn = ""
+            try:
+                temprn = e["rename"]
+            except:
+                temprn = ""
+            items_renamef.append(temprn)
+
 
         for i in range(len(items_files)):
             if items_files[i] in tempfname+self.ignlist:continue
