@@ -1,12 +1,12 @@
 '''
  名称: autodmhy 
- 版本: v1.5
+ 版本: v1.6
  作者: kidtic
  说明: 实现动漫花园www.dmhy.org自动追番功能
 
  环境: 提前设置好代理与比特彗星的远程下载功能
  使用: autodmhy.py会自动遍历当前目录下的所有文件夹，只有文件夹中有dmhy.json的才会被当作工作目录。
-        终端运行 【autodmhy.py add "关键词"】 会添加指定的目录
+        终端运行 【autodmhy.py add "动漫名" "关键词" [S2]】 会添加指定的目录S2可加可不加
         终端运行 【autodmhy.py ref】会重新刷新所有的dmhy.json的items，同步网站内容。
         终端运行 【autodmhy.py】 动态更新items，并且进行自动补充下载
  目录结构：
@@ -26,6 +26,7 @@
     v1.3 - 修改框架 dmhy.json
     v1.4 - 加入重命名功能，不过需要把比特彗星的任务停掉重新运行才行。
     v1.5 - 修复v1.4的两个bug
+    v1.6 - 增加add添加动漫
 '''
 
 from requests_html import HTMLSession
@@ -292,20 +293,63 @@ class Search_dmhy:
             print(items_files[i])
             self.session.post(self.downurl+"/panel/task_add_magnet_result",data)
     
-if __name__ == '__main__':
+
+
+def cmd_run(fetch=False):
     dev = Search_dmhy()
     list_allfile = []
-
     for dirpath, dirnames, filenames in os.walk('.'):
         for dirname in dirnames:  #遍历所有文件夹下的内容
             workpath = os.path.join(dirpath, dirname)
             if dev.open(workpath):  # 查看文件夹下是否有keyword文件
                 list_allfile.append(workpath)
-                dev.search()
-                dev.download()
+                dev.search(fetch)
+                if fetch is False:
+                    dev.download()
     #print res
     print("====================目前追番列表===================")
     for e in list_allfile:
         print(e)
-    
     input("Press any key to continue")
+
+
+def cmd_add(name, keyword, season):
+    '''
+    添加json
+    '''
+    dirname = "["+name+"]"
+    if season != "":
+        dirname = dirname +  "["+season+"]"
+    #判断是否有重名的
+    dirFileList =  os.listdir(".")
+    if dirname in dirFileList:
+        print("有重名文件")
+        return
+    curdir = "./"+dirname
+    os.mkdir(curdir)
+    dmhyjson = {"keyword":keyword, "name":name, "season":season, "ignlist":[], "items":[]}
+    #将self.dmhyjson存入
+    with open(curdir + "/dmhy.json",'w',encoding='utf-8') as f:
+        json.dump(dmhyjson, f, indent=4, ensure_ascii=False)
+
+
+if __name__ == '__main__':
+    argNum = len(sys.argv)
+    if argNum == 1:
+        cmd_run()
+        exit()
+    
+    if sys.argv[1]=='ref':
+        cmd_run(True)
+        exit()
+    elif sys.argv[1]=='add':
+        ss=""
+        if argNum == 4:
+            ss=""
+        elif argNum == 5:
+            ss=sys.argv[4]
+        else:
+            print("error param")
+            exit()
+        cmd_add(sys.argv[2],sys.argv[3],ss)
+        exit()
